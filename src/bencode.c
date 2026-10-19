@@ -17,6 +17,25 @@ static int8_t is_numeric_start(const uint8_t *data, uint8_t* is_neg){
         return 1;
     return 0;
 }
+ 
+static byte_dict *dict_next(byte_dict *current)
+{
+    current->next_kv = calloc(1, sizeof(byte_dict));
+    if (current->next_kv == NULL)
+        return NULL;
+
+    return current->next_kv;
+}
+
+
+static byte_list *list_next(byte_list *current)
+{
+    current->next_element = calloc(1, sizeof(byte_dict));
+    if (current->next_element == NULL)
+        return NULL;
+
+    return current->next_element;
+}
 
 // this function extracts integer values in a stream of bytes untill dlimeter
 int8_t extract_int_val(byte_buffer *bb, uint8_t dlim, int64_t* out){
@@ -50,7 +69,7 @@ int8_t extract_int_val(byte_buffer *bb, uint8_t dlim, int64_t* out){
 int64_t bencode_parse_int(byte_buffer* bb){
     int64_t val;
     if(bb == NULL ||bb->data == NULL || bb->data[0] != 'i')
-        return NULL;
+        return -1;
 
     bb->offset++;
 
@@ -65,7 +84,7 @@ int64_t bencode_parse_int(byte_buffer* bb){
 
 byte_slice* bencode_parse_string(byte_buffer* bb){
     uint8_t* dc;
-    int64_t* out;
+    int64_t out = 0;
     if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data, dc)){
         if(*dc == 1){
             // string length cant be negative
@@ -73,7 +92,7 @@ byte_slice* bencode_parse_string(byte_buffer* bb){
         }
         return NULL;
     }
-    int res = extract_int_val(bb, ':', out);
+    int res = extract_int_val(bb, ':', &out);
     if(res == -1){
         return NULL;
     }
@@ -86,8 +105,9 @@ byte_slice* bencode_parse_string(byte_buffer* bb){
     if(!bs){
         return NULL;
     }
-    bs->length = *out;
+    bs->length = out;
     bs->data = &bb->data[bb->offset];
+    bb->offset += bs->length;
 
     return bs;
 }
@@ -115,7 +135,11 @@ byte_list* bencode_parse_list(byte_buffer* bb){
             }
             bl->type = BENCODE_INT;
             bl->i = val;
-            bl = bl->next_element;
+
+            bl = list_next(bl);
+            if(!bl)
+                return NULL;
+
             continue;
         }
         else if(bb->data[bb->offset] == 'l'){
@@ -124,7 +148,11 @@ byte_list* bencode_parse_list(byte_buffer* bb){
                 return NULL;
             }
             bl->type = BENCODE_LIST;
-            bl = bl->next_element;
+
+            bl = list_next(bl);
+            if(!bl)
+                return NULL;
+
             continue;
         }
         else if(bb->data[bb->offset] == 'd'){
@@ -133,7 +161,11 @@ byte_list* bencode_parse_list(byte_buffer* bb){
                 return NULL;
             bl->type = BENCODE_DICT;
             bl->d = bd;
-            bl = bl->next_element;
+
+            bl = list_next(bl);
+            if(!bl)
+                return NULL;
+
             continue;
         }
         else if(is_digit(bb)){
@@ -142,7 +174,11 @@ byte_list* bencode_parse_list(byte_buffer* bb){
                 return NULL;
             }
             bl->type = BENCODE_STRING;
-            bl = bl->next_element;
+
+            bl = list_next(bl);
+            if(!bl)
+                return NULL;
+
             continue;
         }
         else{
@@ -160,11 +196,13 @@ byte_dict* bencode_parse_dict(byte_buffer* bb){
 
     // we are on the first key now and keys are string types
 
-    byte_dict* bd = calloc(1, sizeof(byte_dict));
-    if(bd == NULL){
+    byte_dict* bd_head = calloc(1, sizeof(byte_dict));
+    if(bd_head == NULL){
         return NULL;
     }
-    while(bb->data[bb->offset] != 'e'){
+    byte_dict* bd = bd_head;
+
+    while(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
         bd->key = bencode_parse_string(bb);
 
         if(bb->data[bb->offset] == 'i'){
@@ -176,7 +214,11 @@ byte_dict* bencode_parse_dict(byte_buffer* bb){
             }
             bd->type_val = BENCODE_INT;
             bd->val.i = val;
-            bd = bd->next_kv;
+
+            bd = dict_next(bd);
+            if(bd == NULL)
+                return NULL;
+
             continue;
         }
         else if(bb->data[bb->offset] == 'l'){
@@ -186,7 +228,9 @@ byte_dict* bencode_parse_dict(byte_buffer* bb){
             }
             bd->type_val = BENCODE_LIST;
             bd->val.l = bll;
-            bd = bd->next_kv;
+            bd = dict_next(bd);
+            if(bd == NULL)
+                return NULL;
             continue;
         }
         else if(bb->data[bb->offset] == 'd'){
@@ -196,7 +240,9 @@ byte_dict* bencode_parse_dict(byte_buffer* bb){
             }
             bd->type_val = BENCODE_DICT;
             bd->val.d = bdd;
-            bd = bd->next_kv;
+            bd = dict_next(bd);
+            if(bd == NULL)
+                return NULL;
             continue;
         }
         else if (is_digit(bb)) {
@@ -206,7 +252,9 @@ byte_dict* bencode_parse_dict(byte_buffer* bb){
             }
             bd->type_val = BENCODE_STRING;
             bd->val.s = *bs;
-            bd = bd->next_kv;
+            bd = dict_next(bd);
+            if(bd == NULL)
+                return NULL;
             continue;
         }
         else{

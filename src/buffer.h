@@ -11,7 +11,8 @@ typedef struct {
     size_t offset;
 } byte_buffer;
 
-byte_buffer* byte_buffer_init(size_t cap);
+byte_buffer* byte_buffer_init(size_t cap, size_t data_len);
+byte_buffer* byte_buffer_read_file(const char* filepath);
 void byte_buffer_destroy(byte_buffer* bb);
 
 #endif //BITTY_BUFFER_H

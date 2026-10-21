@@ -6,18 +6,8 @@
 
 int main(void)
 {
-    const uint8_t input[] = "d4:name5:David4:agei20e4:listli1ei2eee";
-
-    byte_buffer bb = {
-        .data = (uint8_t *)input,
-        .len = sizeof(input) - 1,
-        .offset = 0
-    };
-
-    printf("Input: %.*s\n", (int)bb.len, bb.data);
-    printf("Length: %zu\n", bb.len);
-
-    bencode_parse_dict(&bb);
+    
+    torrent_metadata* tm = bencode_parse_metadata("test/test.torrent");
 
     return 0;
 }

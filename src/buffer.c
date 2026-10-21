@@ -1,7 +1,11 @@
 #include "buffer.h"
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/stat.h>
 
-byte_buffer* byte_buffer_init(size_t cap){
+byte_buffer* byte_buffer_init(size_t cap, size_t data_len){
     if(cap == 0)
         return NULL;
 
@@ -10,11 +14,45 @@ byte_buffer* byte_buffer_init(size_t cap){
         return NULL;
 
     // it should be stat.st_size length but for now 2048 is enough
-    bb->data = calloc(1, 2048);
+    bb->data = calloc(1, data_len);
     if(!bb)
         return NULL;
 
+    bb->len = data_len;
     bb->cap = cap;
+    bb->offset = 0;
+    return bb;
+}
+
+byte_buffer* byte_buffer_read_file(const char* filepath){
+    struct stat st;
+    size_t readed = 0;
+
+    int filefd = open(filepath,O_RDONLY);
+    if(filefd == -1){
+        return NULL;
+    }
+
+    int res = fstat(filefd, &st);
+    if(res == -1){
+        return NULL;
+    }
+
+    size_t filesize = st.st_size;
+
+    byte_buffer* bb = byte_buffer_init(4068, filesize);
+    if(bb == NULL || bb->data == NULL){
+        close(filefd);
+        return NULL;
+    }
+
+    while((readed = read(filefd, (void*)bb->data + bb->offset, filesize)) != 0){
+        bb->offset += readed;
+    }
+
+    bb->offset =0;
+    close(filefd);
+
     return bb;
 }
 

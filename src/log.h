@@ -33,8 +33,7 @@ typedef enum {
  */
 typedef struct {
     error_code ecode;
-    log_level ll;
-    const char* report;
+    int any_err;
 }error_t;
 
 

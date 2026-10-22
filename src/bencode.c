@@ -1,5 +1,6 @@
 #include "bencode.h"
 #include "buffer.h"
+#include "log.h"
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -41,10 +42,15 @@ static byte_list *list_next(byte_list *current)
 }
 
 // this function extracts integer values in a stream of bytes untill dlimeter
-int8_t extract_int_val(byte_buffer *bb, uint8_t dlim, int64_t* out){
+int extract_int_val(byte_buffer* bb, uint8_t dlim, int64_t* out, error_t* err){
     uint8_t is_negative = 0;
-    if(out == NULL || bb == NULL || bb->data ==NULL || !is_numeric_start(bb->data + bb->offset, &is_negative))
+    if(out == NULL || bb == NULL || bb->data ==NULL || !is_numeric_start(bb->data + bb->offset, &is_negative)){
+        log_msg(ll_error,"Offset error or buffer is NULL"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
         return -1;
+    }
+
 
     int64_t value = 0;
 
@@ -57,6 +63,9 @@ int8_t extract_int_val(byte_buffer *bb, uint8_t dlim, int64_t* out){
 
         // value <= INT64_MAX => value * 10 + digit <= INT64_MAX => value <= (INT64_MAX - digit)/ 10
         if(value > (INT64_MAX - digit) / 10){
+            log_msg(ll_error,"Overflow: value is bigger than INT64_MAX"); 
+            err->any_err = 1;
+            err->ecode = ERR_IO;
             return -1;
         }
         value = value * 10 + digit;
@@ -66,312 +75,418 @@ int8_t extract_int_val(byte_buffer *bb, uint8_t dlim, int64_t* out){
         value = (-(value));
     }
     *out = value;
-    return 1;
+    return 0;
 }
 
-int64_t bencode_parse_int(byte_buffer* bb){
+int bencode_parse_int(byte_buffer* bb, int64_t* out, error_t* err){
     int64_t val;
-    if(bb == NULL ||bb->data == NULL || bb->data[bb->offset] != 'i')
+    if(bb == NULL ||bb->data == NULL || bb->data[bb->offset] != 'i'){
+        log_msg(ll_error,"Offset error or buffer is NULL"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
         return -1;
+    }
 
     bb->offset++;
 
-    int8_t res = extract_int_val(bb, 'e', &val);
+    int res = extract_int_val(bb, 'e', &val, err);
     if(res == -1){
-        // TODO: implement error handling
+        // in here we got our error struct and not chnging it 
+        // just simply return with -1
         return -1;
     }
     if (bb->offset >= bb->len || bb->data[bb->offset] != 'e') {
+        log_msg(ll_error,"Offset error or buffer is NULL"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
       return -1;
     }
 
+    *out = val;
+
     bb->offset++; // consume integer's 'e'
 
-    return val;
+    return 0;
 }
 
-byte_slice* bencode_parse_string(byte_buffer* bb){
+int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err){
     uint8_t* dc;
-    int64_t out = 0;
+    int64_t slen = 0;
     if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data, dc)){
-        if(*dc == 1){
-            // string length cant be negative
-            return NULL;
-        }
-        return NULL;
+        log_msg(ll_error,"String Length Negative or not valid"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
     }
-    int res = extract_int_val(bb, ':', &out);
+    int res = extract_int_val(bb, ':', &slen, err);
     if(res == -1){
-        return NULL;
+        return -1;
     }
-    if(bb->data[bb->offset] != ':')
-        return NULL;
+    if(bb->data[bb->offset] != ':'){
+        log_msg(ll_error,"Invalid String Format"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
+    }
 
     bb->offset++;
 
     byte_slice* bs = calloc(1, sizeof(byte_slice));
     if(!bs){
-        return NULL;
+        log_msg(ll_error,"No Memory"); 
+        err->any_err = 1;
+        err->ecode = ERR_OUT_OF_MEMORY;
+        return -1;
     }
-    bs->length = out;
+    bs->length = slen;
     bs->data = &bb->data[bb->offset];
     bb->offset += bs->length;
 
-    return bs;
+    *out = bs;
+    return 0;
 }
 
-byte_list* bencode_parse_list(byte_buffer* bb){
-    if(bb == NULL || bb->data == NULL || bb->len == 0 ||bb->data[bb->offset] != 'l' )
-        return NULL;
+int bencode_parse_list(byte_buffer* bb,byte_list** out, error_t* err){
+    if(bb == NULL || bb->data == NULL || bb->len == 0 ||bb->data[bb->offset] != 'l' ){
+        log_msg(ll_error,"String Length Negative or not valid"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
+    }
 
     bb->offset++;
 
     byte_list* bl = calloc(1, sizeof(byte_list));
     if(!bl){
-        return NULL;
+        log_msg(ll_error,"No memory"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
     }
+    byte_list* bl_head = bl;
 
     // whats the element type ?!
 
     while(bb->offset < bb->len && bb->data[bb->offset] != 'e'){
         if(bb->data[bb->offset] == 'i'){
-            int64_t val = bencode_parse_int(bb);
-            // this is not safe
-            // TODO : make better errror handling plan
-            if(val == -1){
-                return NULL;
+            int64_t val;
+            int res = bencode_parse_int(bb, &val, err);
+
+            if(res == -1){
+                return -1;
             }
             bl->type = BENCODE_INT;
             bl->i = val;
 
             bl = list_next(bl);
-            if(!bl)
-                return NULL;
-
+            if(!bl){
+                log_msg(ll_error, "No memory");
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
+            }
             continue;
         }
         else if(bb->data[bb->offset] == 'l'){
-            byte_list* bll = bencode_parse_list(bb); 
-            if(bll == NULL){
-                return NULL;
+            byte_list* bll;
+            int res = bencode_parse_list(bb, &bll, err); 
+            if(res == -1){
+                return -1;
             }
             bl->type = BENCODE_LIST;
             bl->l = bll;
 
             bl = list_next(bl);
-            if(!bl)
-                return NULL;
+            if(!bl){
+
+                log_msg(ll_error, "No memory");
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
+            }
 
             continue;
         }
         else if(bb->data[bb->offset] == 'd'){
-            byte_dict* bd = bencode_parse_dict(bb);
-            if(!bd)
-                return NULL;
+            byte_dict* bd;
+            int res = bencode_parse_dict(bb, &bd, err);
+            if(!res)
+                return -1;
+
             bl->type = BENCODE_DICT;
             bl->d = bd;
 
             bl = list_next(bl);
-            if(!bl)
-                return NULL;
+            if(!bl){
+
+                log_msg(ll_error, "No memory");
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
+            }
 
             continue;
         }
         else if(is_digit(bb)){
-            byte_slice* bs = bencode_parse_string(bb);
-            if(bs == NULL){
-                return NULL;
+            byte_slice* bs;
+            int res = bencode_parse_string(bb, &bs, err);
+            if(res == -1){
+                return -1;
             }
+
             bl->type = BENCODE_STRING;
             bl->s = *bs;
 
             bl = list_next(bl);
-            if(!bl)
-                return NULL;
+            if(!bl){
+                log_msg(ll_error, "No memory");
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
+            }
 
             continue;
         }
         else{
-            return NULL;
+            log_msg(ll_error,"Not Valid Bencode"); 
+            err->any_err = 1;
+            err->ecode = ERR_BENCODE_INVALID;
+            return -1;
         }
     }
 
     if (bb->offset >= bb->len) {
-      return NULL;
+            log_msg(ll_error,"offset bigger than length"); 
+            err->any_err = 1;
+            err->ecode = ERR_BENCODE_INVALID;
+            return -1;
     }
     bb->offset++;
-    return bl;
+    *out = bl_head;
+    return 0;
 }
 
-byte_dict* bencode_parse_dict(byte_buffer* bb){
-    if(bb == NULL || bb->data == NULL || bb->len == 0|| bb->offset > bb->len ||bb->data[bb->offset] != 'd')
-        return NULL;
+int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err){
+    if(bb == NULL || bb->data == NULL || bb->len == 0|| bb->offset > bb->len ||bb->data[bb->offset] != 'd'){
+            log_msg(ll_error,"Offset error or buffer is NULL"); 
+            err->any_err = 1;
+            err->ecode = ERR_BENCODE_INVALID;
+            return -1;
+
+    }
     bb->offset++;
 
     // we are on the first key now and keys are string types
-
     byte_dict* bd_head = calloc(1, sizeof(byte_dict));
     if(bd_head == NULL){
-        return NULL;
+        log_msg(ll_error,"No Memory for bd_head"); 
+        err->any_err = 1;
+        err->ecode = ERR_OUT_OF_MEMORY;
+        return -1;
     }
     byte_dict* bd = bd_head;
 
     while(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
 
-        bd->key = bencode_parse_string(bb);
+        int res = bencode_parse_string(bb, &bd->key, err);
 
-        if (bd->key == NULL || bb->offset >= bb->len)
-          return NULL;
+        if (res == -1|| bb->offset >= bb->len){
+            return -1;
+        }
 
         if(bb->data[bb->offset] == 'i'){
-            int64_t val = bencode_parse_int(bb);
-            // this is not safe
-            // TODO : make better errror handling plan
-            if(val == -1){
-                return NULL;
+            int64_t val;
+            int res = bencode_parse_int(bb, &val, err);
+            if(res == -1){
+                return -1;
             }
             bd->type_val = BENCODE_INT;
             bd->val.i = val;
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
-                if(bd == NULL)
-                    return NULL;
+                if(bd == NULL){
+                    log_msg(ll_error,"out of memory"); 
+                    err->any_err = 1;
+                    err->ecode = ERR_OUT_OF_MEMORY;
+                    return -1;
+                }
             }
             continue;
         }
         else if(bb->data[bb->offset] == 'l'){
-            byte_list* bll = bencode_parse_list(bb); 
-            if(bll == NULL){
-                return NULL;
+            byte_list* bll ;
+            int res = bencode_parse_list(bb, &bll, err); 
+            if(res == -1){
+                return -1;
             }
             bd->type_val = BENCODE_LIST;
             bd->val.l = bll;
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
-                if(bd == NULL)
-                    return NULL;
+                if(bd == NULL){
+                    log_msg(ll_error,"out of memory"); 
+                    err->any_err = 1;
+                    err->ecode = ERR_OUT_OF_MEMORY;
+                    return -1;
+                }
             }
             continue;
         }
         else if(bb->data[bb->offset] == 'd'){
             bd->val_start = bb->offset;
-            byte_dict* bdd = bencode_parse_dict(bb);
+            byte_dict* bdd;
+            int res = bencode_parse_dict(bb, &bdd, err);
             bd->val_end = bb->offset - 1;
             if(bdd == NULL){
-                return NULL;
+                log_msg(ll_error,"out of memory"); 
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
             }
             bd->type_val = BENCODE_DICT;
             bd->val.d = bdd;
 
             bd = dict_next(bd);
-            if (bd == NULL)
-              return NULL;
+            if (bd == NULL){
+                log_msg(ll_error,"out of memory"); 
+                err->any_err = 1;
+                err->ecode = ERR_OUT_OF_MEMORY;
+                return -1;
+            }
             continue;
         }
         else if (is_digit(bb)) {
-            byte_slice *bs = bencode_parse_string(bb);
-            if (bs == NULL) {
-                return NULL;
+            byte_slice *bs;
+            int res = bencode_parse_string(bb, &bs, err);
+            if (res == -1) {
+                return -1;
             }
             bd->type_val = BENCODE_STRING;
             bd->val.s = *bs;
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
-                if(bd == NULL)
-                    return NULL;
+                if(bd == NULL){
+                    log_msg(ll_error,"out of memory"); 
+                    err->any_err = 1;
+                    err->ecode = ERR_OUT_OF_MEMORY;
+                    return -1;
+
+                }
             }
             continue;
         }
         else{
-            return NULL;
+            log_msg(ll_error,"Not a valid format"); 
+            err->any_err = 1;
+            err->ecode = ERR_BENCODE_INVALID;
+            return -1;
         }
     }
     if (bb->offset >= bb->len) {
-      return NULL;
+        log_msg(ll_error,"Offset error"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
     }
     bb->offset++; // consume 'e'
-    return bd_head;
+    *out = bd_head;
+    return 0;
 }
 
 
-byte_dict* find_dict_val(byte_dict* bd,const char* key){
-    if(bd == NULL)
-        return NULL;
+int find_dict_val(byte_dict* bd, const char* key, byte_dict** out, error_t* err){
+    if(bd == NULL){
+        log_msg(ll_error,"dict is NULL"); 
+        err->any_err = 1;
+        err->ecode = ERR_BENCODE_INVALID;
+        return -1;
+    }
 
     size_t key_len = strlen(key);
 
     while(bd != NULL){
         if(((bd->key->length == key_len)) && (memcmp(bd->key->data, key, bd->key->length) == 0)){
-            return bd;
+            *out = bd;
+            return 0;
         }
         bd = bd->next_kv;
         continue;
     }
-    return NULL;
+    return -1;
 }
 
 
-torrent_metadata* bencode_parse_metadata(const char* filepath){
+int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t* err){
     byte_dict *pdict;
     byte_dict *pinfo;
 
     byte_buffer* bb = byte_buffer_read_file(filepath);
-    if(bb == NULL)
-        return NULL;
+    if(bb == NULL){
+        log_msg(ll_error,"Error in read file %s", filepath); 
+        err->any_err = 1;
+        err->ecode = ERR_IO;
+        return -1;
 
-    byte_dict* bd = bencode_parse_dict(bb);
-    if(bd == NULL){
-        byte_buffer_destroy(bb);
-        return NULL;
     }
 
-    torrent_metadata* tm = calloc(1, sizeof(torrent_metadata));
+    byte_dict* bd;
+    int res = bencode_parse_dict(bb, &bd, err);
+    if(res == -1){
+        byte_buffer_destroy(bb);
+        return -1;
+    }
+
+    torrent_metadata* tm= calloc(1, sizeof(torrent_metadata));
     if(!tm){
         byte_buffer_destroy(bb);
         free(bd);
-        return NULL;
+        log_msg(ll_error, "error init memory");
+        err->any_err = 1;
+        err->ecode = ERR_OUT_OF_MEMORY;
+        return -1;
     }
-    if((pdict = find_dict_val(bd, "announce"))!= NULL){
-        if(pdict != NULL && pdict->type_val == BENCODE_STRING){
+
+    // BUG: this output is NULL
+    int result1  = find_dict_val(bd, "announce", &pdict, err);
+    if(result1 == 0 && pdict->type_val == BENCODE_STRING){
             tm->announce.data = pdict->val.s.data;
             tm->announce.length = pdict->val.s.length;
-        }
+
     }
 
-    pdict = find_dict_val(bd, "info");
+    int result2 = find_dict_val(bd, "info", &pdict, err);
 
-    if (pdict != NULL && pdict->type_val == BENCODE_DICT) {
+    if (result2 == 0 && pdict->type_val == BENCODE_DICT) {
         byte_dict* pinfo = pdict->val.d;
 
         SHA1(&bb->data[pdict->val_start], pdict->val_end - pdict->val_start, tm->info_hash);
 
-
-            if((pdict = find_dict_val(pinfo, "name")) != NULL){
-                if (pdict != NULL && pdict->type_val == BENCODE_STRING) {
+            int fdvn = find_dict_val(pinfo, "name", &pdict, err);
+            if(fdvn == 0 && pdict->type_val == BENCODE_STRING){
                         tm->info.name.data = pdict->val.s.data;
                         tm->info.name.length = pdict->val.s.length;
-                }
+
             }
-            if((pdict = find_dict_val(pinfo, "pieces")) != NULL){
-                if (pdict != NULL && pdict->type_val == BENCODE_STRING) {
+            int fdvnp= find_dict_val(pinfo, "pieces", &pdict, err);
+                if (pdict == 0 && pdict->type_val == BENCODE_STRING) {
                     tm->info.peices.data = pdict->val.s.data;
                     tm->info.peices.length = pdict->val.s.length;
-                }
             }
-            if((pdict = find_dict_val(pinfo, "piece length")) != NULL){
-                if (pdict != NULL && pdict->type_val == BENCODE_INT) {
+            int fdvpl = find_dict_val(pinfo, "piece length", &pdict, err);
+                if (fdvpl == 0  && pdict->type_val == BENCODE_INT) {
                     tm->info.piece_length = pdict->val.i;
-                }
             }
-            if((pdict = find_dict_val(pinfo, "length")) != NULL){
-                if (pdict != NULL && pdict->type_val == BENCODE_INT) {
+            int fdvl = find_dict_val(pinfo, "length", &pdict, err);
+                if (fdvl == 0 && pdict->type_val == BENCODE_INT) {
                     tm->info.length = pdict->val.i;
                 }
-            }
     }
-
-    return tm;
+    log_msg(ll_info, "metadata parsed succesfully");
+    log_msg(ll_info, "announce:%.*s", tm->announce.length,tm->announce.data);
+    log_msg(ll_info, "info.length:%zu", tm->info.length);
+    log_msg(ll_info, "info.name:%.*s", tm->info.name.length, tm->info.name.data);
+    return 0;
 }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "buffer.h"
+#include "log.h"
 
 typedef struct byte_list byte_list;
 typedef struct byte_dict byte_dict;
@@ -85,12 +86,27 @@ typedef struct{
     uint8_t info_hash[20];
 } torrent_metadata;
 
-int8_t extract_int_val(byte_buffer* bb, uint8_t dlim, int64_t* out);
-int64_t bencode_parse_int(byte_buffer* bb);
 
-byte_slice* bencode_parse_string(byte_buffer* bb);
-byte_dict* bencode_parse_dict(byte_buffer* bb);
-byte_dict* find_dict_val(byte_dict* bd, const char* key);
-torrent_metadata* bencode_parse_metadata(const char* filepath);
+
+/*
+ * Function prototypes follow this pattern:
+ *
+ * int somefunc(..., *out, *err);
+ *
+ * The return value indicates success or failure
+ *   0     -> Success; the output value is valid
+ *   non 0 -> Failure; check err for error details
+ *
+ * The caller must not use the output value if the function fails
+ */
+
+int extract_int_val(byte_buffer* bb, uint8_t dlim, int64_t* out, error_t* err);
+int bencode_parse_int(byte_buffer* bb, int64_t* out, error_t* err);
+
+int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err);
+int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err);
+int bencode_parse_list(byte_buffer* bb,byte_list** out, error_t* err);
+int find_dict_val(byte_dict* bd, const char* key, byte_dict** out, error_t* err);
+int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t* err);
 
 #endif // BITTY_BENCODE_H

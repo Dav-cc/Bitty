@@ -112,7 +112,7 @@ int bencode_parse_int(byte_buffer* bb, int64_t* out, error_t* err){
 int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err){
     uint8_t dc;
     int64_t slen = 0;
-    if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data, &dc)){
+    if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data + bb->offset, &dc)){
         log_msg(ll_error,"String Length Negative or not valid"); 
         err->any_err = 1;
         err->ecode = ERR_BENCODE_INVALID;
@@ -322,7 +322,6 @@ int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err){
             }
             bd->type_val = BENCODE_LIST;
             bd->val.l = *bll;
-            bencode_free_list(bll);
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
@@ -464,7 +463,7 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata** out, error_t
         byte_dict* pinfo = pdict->val.d;
 
         // check if val_end is correct
-        SHA1(&bb->data[pdict->val_start], pdict->val_end - pdict->val_start, tm->info_hash);
+        SHA1(&bb->data[pdict->val_start], pdict->val_end - pdict->val_start + 1, tm->info_hash);
 
             int fdvn = find_dict_val(pinfo, "name", &pdict, err);
             if(fdvn == 0 && pdict->type_val == BENCODE_STRING){
@@ -504,6 +503,7 @@ void bencode_free_dict(byte_dict* bd){
         if(bd->type_val == BENCODE_DICT){
             bencode_free_dict(bd->val.d);
         }
+        bd = bd->next_kv;
     }
     free(bd);
 }
@@ -516,6 +516,7 @@ void bencode_free_list(byte_list* bl){
         if(bl->type == BENCODE_LIST){
             bencode_free_list(bl->l);
         }
+        bl = bl->next_element;
     }
     free(bl);
 }

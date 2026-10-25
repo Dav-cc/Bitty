@@ -53,7 +53,7 @@ struct byte_dict{
     union{
         int64_t i;
         byte_slice s;
-        byte_list* l;
+        byte_list l;
         byte_dict* d;
     }val;
  
@@ -107,6 +107,9 @@ int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err);
 int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err);
 int bencode_parse_list(byte_buffer* bb,byte_list** out, error_t* err);
 int find_dict_val(byte_dict* bd, const char* key, byte_dict** out, error_t* err);
-int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t* err);
+int bencode_parse_metadata(const char* filepath, torrent_metadata** out, error_t* err);
+
+void bencode_free_dict(byte_dict* bd);
+void bencode_free_list(byte_list* bd);
 
 #endif // BITTY_BENCODE_H

@@ -110,9 +110,9 @@ int bencode_parse_int(byte_buffer* bb, int64_t* out, error_t* err){
 }
 
 int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err){
-    uint8_t* dc;
+    uint8_t dc;
     int64_t slen = 0;
-    if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data, dc)){
+    if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data, &dc)){
         log_msg(ll_error,"String Length Negative or not valid"); 
         err->any_err = 1;
         err->ecode = ERR_BENCODE_INVALID;
@@ -210,7 +210,7 @@ int bencode_parse_list(byte_buffer* bb,byte_list** out, error_t* err){
         else if(bb->data[bb->offset] == 'd'){
             byte_dict* bd;
             int res = bencode_parse_dict(bb, &bd, err);
-            if(!res)
+            if(res != 0)
                 return -1;
 
             bl->type = BENCODE_DICT;
@@ -321,7 +321,8 @@ int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err){
                 return -1;
             }
             bd->type_val = BENCODE_LIST;
-            bd->val.l = bll;
+            bd->val.l = *bll;
+            bencode_free_list(bll);
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
@@ -365,6 +366,7 @@ int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err){
             }
             bd->type_val = BENCODE_STRING;
             bd->val.s = *bs;
+            free(bs);
 
             if(bb->len > bb->offset && bb->data[bb->offset] != 'e'){
                 bd = dict_next(bd);
@@ -419,7 +421,7 @@ int find_dict_val(byte_dict* bd, const char* key, byte_dict** out, error_t* err)
 }
 
 
-int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t* err){
+int bencode_parse_metadata(const char* filepath, torrent_metadata** out, error_t* err){
     byte_dict *pdict;
     byte_dict *pinfo;
 
@@ -449,7 +451,6 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t*
         return -1;
     }
 
-    // BUG: this output is NULL
     int result1  = find_dict_val(bd, "announce", &pdict, err);
     if(result1 == 0 && pdict->type_val == BENCODE_STRING){
             tm->announce.data = pdict->val.s.data;
@@ -462,6 +463,7 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t*
     if (result2 == 0 && pdict->type_val == BENCODE_DICT) {
         byte_dict* pinfo = pdict->val.d;
 
+        // check if val_end is correct
         SHA1(&bb->data[pdict->val_start], pdict->val_end - pdict->val_start, tm->info_hash);
 
             int fdvn = find_dict_val(pinfo, "name", &pdict, err);
@@ -471,7 +473,7 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t*
 
             }
             int fdvnp= find_dict_val(pinfo, "pieces", &pdict, err);
-                if (pdict == 0 && pdict->type_val == BENCODE_STRING) {
+                if (fdvnp == 0 && pdict->type_val == BENCODE_STRING) {
                     tm->info.peices.data = pdict->val.s.data;
                     tm->info.peices.length = pdict->val.s.length;
             }
@@ -488,5 +490,32 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata* out, error_t*
     log_msg(ll_info, "announce:%.*s", tm->announce.length,tm->announce.data);
     log_msg(ll_info, "info.length:%zu", tm->info.length);
     log_msg(ll_info, "info.name:%.*s", tm->info.name.length, tm->info.name.data);
+
+    *out = tm;
+    bencode_free_dict(bd);
     return 0;
+}
+
+
+
+void bencode_free_dict(byte_dict* bd){
+    while(bd->next_kv != NULL){
+        free(bd->key);
+        if(bd->type_val == BENCODE_DICT){
+            bencode_free_dict(bd->val.d);
+        }
+    }
+    free(bd);
+}
+
+void bencode_free_list(byte_list* bl){
+    while(bl->next_element != NULL){
+        if(bl->type == BENCODE_DICT){
+            bencode_free_dict(bl->d);
+        }
+        if(bl->type == BENCODE_LIST){
+            bencode_free_list(bl->l);
+        }
+    }
+    free(bl);
 }

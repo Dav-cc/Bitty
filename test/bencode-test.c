@@ -15,7 +15,7 @@ int main(void){
         return -1;
     }
 
-    int res = bencode_parse_metadata("test/test.torrent", tm, err);
+    int res = bencode_parse_metadata("test/test.torrent", &tm, err);
 
     return 0;
 }

@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <sys/stat.h>
 
 byte_buffer* byte_buffer_init(size_t cap, size_t data_len){

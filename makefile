@@ -11,7 +11,8 @@ BUILD_DIR = build
 SRC = \
 	src/bencode.c \
 	src/buffer.c \
-	src/log.c
+	src/log.c    \
+	src/main.c
 
 TEST_SRC = \
 	test/unit/Bencode-parser.c

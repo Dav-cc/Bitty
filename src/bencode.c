@@ -17,7 +17,7 @@ static int8_t is_digit(byte_buffer *bb){
 static int8_t is_numeric_start(const uint8_t *data, uint8_t* is_neg){
     if(data[0] == '-')
         *is_neg = 1;
-    if(data[0] == '-' || data[0] >= '0' && data[0] <= '9')
+    if(data[0] == '-' || (data[0] >= '0' && data[0] <= '9'))
         return 1;
     return 0;
 }
@@ -112,7 +112,7 @@ int bencode_parse_int(byte_buffer* bb, int64_t* out, error_t* err){
 int bencode_parse_string(byte_buffer* bb, byte_slice** out, error_t* err){
     uint8_t dc;
     int64_t slen = 0;
-    if(bb == NULL || bb->len == 0 || bb->data == NULL || is_numeric_start(bb->data + bb->offset, &dc)){
+    if(bb == NULL || bb->len == 0 || bb->data == NULL || !is_numeric_start(bb->data + bb->offset, &dc)){
         log_msg(ll_error,"String Length Negative or not valid"); 
         err->any_err = 1;
         err->ecode = ERR_BENCODE_INVALID;
@@ -338,6 +338,9 @@ int bencode_parse_dict(byte_buffer* bb, byte_dict** out, error_t* err){
             bd->val_start = bb->offset;
             byte_dict* bdd;
             int res = bencode_parse_dict(bb, &bdd, err);
+            if(res != 0){
+                return -1;
+            }
             bd->val_end = bb->offset - 1;
             if(bdd == NULL){
                 log_msg(ll_error,"out of memory"); 
@@ -422,7 +425,6 @@ int find_dict_val(byte_dict* bd, const char* key, byte_dict** out, error_t* err)
 
 int bencode_parse_metadata(const char* filepath, torrent_metadata** out, error_t* err){
     byte_dict *pdict;
-    byte_dict *pinfo;
 
     byte_buffer* bb = byte_buffer_read_file(filepath);
     if(bb == NULL){

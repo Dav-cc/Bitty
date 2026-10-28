@@ -17,7 +17,7 @@ static const char *log_level_name(log_level ll)
 }
 
 void log_msg(log_level ll, const char* str, ...){
-    if(ll < min_level){
+    if(ll > min_level){
         return;
     }
     va_list args;

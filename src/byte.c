@@ -1,7 +1,10 @@
 #include "log.h"
+#include "byte.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <sys/random.h>
+#include <sys/types.h>
 
 /*
  *  Byte Percent Encodeing:
@@ -29,4 +32,13 @@ char* raw_byte_to_percent_encoding(uint8_t* data, size_t size){
 }
 
 
+// we generat our 20 byte peer-id by time (raw_byte)
 
+int generate_peer_id(uint8_t* peer_id){
+    ssize_t bytes = getrandom(peer_id, PEERID_LEN, 0);
+    if(bytes != 20){
+        log_msg(ll_error, "can not generate random number for peer_id");
+        return -1;
+    }
+    return 0;
+}

@@ -12,7 +12,8 @@ SRC = \
 	src/bencode.c \
 	src/buffer.c \
 	src/log.c    \
-	src/main.c
+	src/main.c   \
+	src/byte.c
 
 TEST_SRC = \
 	test/unit/Bencode-parser.c

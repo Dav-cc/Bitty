@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "log.h"
+#include "byte.h"
 
 #include "bencode.h"
 
@@ -15,7 +16,7 @@ int main(void){
         return -1;
     }
 
-    int res = bencode_parse_metadata("test/archlinux-2026.10.01-x86_64.iso.torrent", &tm, err);
+    int res = bencode_parse_metadata("test/debian-13.7.0-amd64-DVD-1.iso.torrent", &tm, err);
     if(res !=0)
         return -1;
 

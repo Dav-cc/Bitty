@@ -3,6 +3,9 @@
 
 // this struct owns pointe fields inside it
 #include "bencode.h"
+#include "buffer.h"
+
+#define URL_LEN_MAX 4096
 
 typedef struct{
     char* announce;
@@ -19,6 +22,7 @@ typedef struct{
 
 // this function takes tm and peer id (raw bytes) and make Http Get request url to sent for nodes 
 int tracker_create_tracker_info(torrent_metadata* tm,uint8_t* peer_id, tracker_info** out, error_t *err);
+int tracker_create_http_url(tracker_info* info, byte_buffer** out, error_t *err);
 
 
 #endif

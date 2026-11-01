@@ -9,6 +9,7 @@
 int main(void){
     tracker_info *ti;
     uint8_t peer_id[20];
+    byte_buffer* bb = byte_buffer_init(URL_LEN_MAX, URL_LEN_MAX);
     torrent_metadata* tm = calloc(1, sizeof(torrent_metadata));
     if(!tm){
         return -1;
@@ -31,11 +32,11 @@ int main(void){
     if(tracker_res != 0)
         return -1;
 
-    log_msg(ll_info, "Tracker info created successfully");
-    log_msg(ll_info, "Announce URL: %s", ti->announce);
-    log_msg(ll_info, "Encoded Info Hash: %s", ti->encoded_info_hash);
-    log_msg(ll_info, "Encoded Peer ID: %s", ti->encoded_peer_id);
-    log_msg(ll_info, "Port: %u", ti->port);
+    int hres = tracker_create_http_url(ti, &bb, err);
+    if(hres != 0)
+        return -1;
+
+
 
     return 0;
 }

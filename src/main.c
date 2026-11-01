@@ -9,7 +9,7 @@
 int main(void){
     tracker_info *ti;
     uint8_t peer_id[20];
-    byte_buffer* bb = byte_buffer_init(URL_LEN_MAX, URL_LEN_MAX);
+    byte_buffer* bb =NULL;
     torrent_metadata* tm = calloc(1, sizeof(torrent_metadata));
     if(!tm){
         return -1;

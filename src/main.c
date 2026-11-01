@@ -31,5 +31,11 @@ int main(void){
     if(tracker_res != 0)
         return -1;
 
+    log_msg(ll_info, "Tracker info created successfully");
+    log_msg(ll_info, "Announce URL: %s", ti->announce);
+    log_msg(ll_info, "Encoded Info Hash: %s", ti->encoded_info_hash);
+    log_msg(ll_info, "Encoded Peer ID: %s", ti->encoded_peer_id);
+    log_msg(ll_info, "Port: %u", ti->port);
+
     return 0;
 }

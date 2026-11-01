@@ -15,6 +15,13 @@ int tracker_create_tracker_info(torrent_metadata* tm, uint8_t* peer_id, tracker_
         log_msg(ll_error, "memory allocation failed for malloc in tcti");
         return -1;
     }
+    ti->announce = malloc(sizeof(char) * (tm->announce.length + 1)); // +1 for null terminator
+    if(!ti->announce){
+        err->any_err = 1;
+        err->ecode = ERR_OUT_OF_MEMORY;
+        log_msg(ll_error, "memory allocation failed for malloc in tcti");
+        return -1;
+    }
     // default torrent port
     ti->port = 6881;
 
@@ -32,6 +39,9 @@ int tracker_create_tracker_info(torrent_metadata* tm, uint8_t* peer_id, tracker_
     }
 
     ti->left = tm->info.length;
+
+    memcpy(ti->announce, tm->announce.data, tm->announce.length);
+    ti->announce[tm->announce.length] = '\0'; // null terminate the string
 
     *out = ti;
     return 0;

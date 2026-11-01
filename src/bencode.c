@@ -487,11 +487,6 @@ int bencode_parse_metadata(const char* filepath, torrent_metadata** out, error_t
                     tm->info.length = pdict->val.i;
                 }
     }
-    log_msg(ll_info, "metadata parsed succesfully");
-    log_msg(ll_info, "announce:%.*s", tm->announce.length,tm->announce.data);
-    log_msg(ll_info, "info.length:%zu", tm->info.length);
-    log_msg(ll_info, "info.name:%.*s", tm->info.name.length, tm->info.name.data);
-
     *out = tm;
     bencode_free_dict(bd);
     return 0;

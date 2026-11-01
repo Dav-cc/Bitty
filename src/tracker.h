@@ -5,6 +5,7 @@
 #include "bencode.h"
 
 typedef struct{
+    char* announce;
     char* encoded_info_hash;
     char* encoded_peer_id;
 

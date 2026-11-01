@@ -14,5 +14,6 @@ typedef struct {
 byte_buffer* byte_buffer_init(size_t cap, size_t data_len);
 byte_buffer* byte_buffer_read_file(const char* filepath);
 void byte_buffer_destroy(byte_buffer* bb);
+void byte_buffer_append(byte_buffer* bb, const char*data, size_t len);
 
 #endif //BITTY_BUFFER_H

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 #include <sys/stat.h>
 
 byte_buffer* byte_buffer_init(size_t cap, size_t data_len){
@@ -62,4 +63,23 @@ void byte_buffer_destroy(byte_buffer* bb){
     bb->offset = 0;
     bb->cap = 0;
     free((void*)bb);
+}
+
+void byte_buffer_append(byte_buffer* bb, const char* data, size_t len){
+    if(bb->offset + len > bb->cap){
+        // reallocate
+        size_t new_cap = bb->cap * 2;
+        while(new_cap < bb->offset + len){
+            new_cap *= 2;
+        }
+        uint8_t* new_data = realloc((void*)bb->data, new_cap);
+        if(!new_data){
+            return;
+        }
+        bb->data = new_data;
+        bb->cap = new_cap;
+    }
+
+    memcpy((void*)bb->data + bb->offset, data, len);
+    bb->offset += len;
 }

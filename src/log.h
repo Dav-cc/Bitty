@@ -11,6 +11,9 @@ typedef enum {
     ERR_IO,
     ERR_BENCODE_INVALID,
     ERR_OUT_OF_MEMORY,
+    ERR_INVALID_URL,
+    ERR_INVALID_TORRENT_FILE,
+    ERR_INVALID_TRACKER_RESPONSE,
 } error_code;
 
 
